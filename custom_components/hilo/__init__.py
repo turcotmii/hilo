@@ -524,8 +524,8 @@ class Hilo:
         attrs = {**attrs, **new_attrs}
         if keep_state and current:
             state = current.state
-        if "Cost" in attrs:
-            attrs["Cost"] = state
+        # if "Cost" in attrs: #retrait mig
+        #    attrs["Cost"] = state #retrait mig
         self._hass.states.async_set(entity, state, attrs)
 
     @property
