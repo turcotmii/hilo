@@ -827,7 +827,7 @@ class HiloCostSensor(HiloEntity, RestoreEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self):
-        return {"last_update": self._last_update, "Cost": self.state}
+        return {"last_update": self._last_update}
 
     async def async_added_to_hass(self):
         """Handle entity about to be added to hass event."""
