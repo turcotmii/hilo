@@ -623,6 +623,9 @@ class Hilo:
         """not sure why this doesn't get created with a proper device_class"""
         current_state = state.as_dict()
         attrs = current_state.get("attributes", {})
+        # fix mig pour ignorer les entités select
+        if entity.startswith("select."): 
+            return
         if not attrs.get("source"):
             LOG.debug(f"No source entity defined on {entity}: {current_state}")
             return
