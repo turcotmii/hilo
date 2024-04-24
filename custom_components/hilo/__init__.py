@@ -510,7 +510,7 @@ class Hilo:
             self.check_tarif()
 
     def set_state(self, entity, state, new_attrs={}, keep_state=False, force=False):
-        params = f"entity={entity}, state={state}, new_attrs={new_attrs}, keep_state={keep_state}"
+        params = f"{entity=} {state=} {new_attrs=} {keep_state=}"
         current = self._hass.states.get(entity)
         if not current:
             if not force:
@@ -519,14 +519,15 @@ class Hilo:
             attrs = {}
         else:
             attrs = dict(current.as_dict()["attributes"])
-        LOG.debug(f"Setting state {params} {current}")
         attrs["last_update"] = datetime.now()
+        attrs["hilo_update"] = True
         attrs = {**attrs, **new_attrs}
         if keep_state and current:
             state = current.state
         if "Cost" in attrs:
             attrs["Cost"] = state
-        self._hass.states.async_set(entity, state, attrs)
+        LOG.debug(f"Setting state {params} {current=} {attrs=}")
+        self._hass.states.async_set(entity, state, attrs, force_update=force)
 
     @property
     def high_times(self):
@@ -559,18 +560,28 @@ class Hilo:
             target_cost = self._hass.states.get(f"sensor.hilo_rate_{tarif}")
             if target_cost.state != current_cost.state:
                 LOG.debug(
-                    f"check_tarif: Updating current cost, was {current_cost.state} now {target_cost.state}"
+                    f"check_tarif: Updating current cost for {self}, was {current_cost.state} now {target_cost.state}"
                 )
                 self.set_state("sensor.hilo_rate_current", target_cost.state)
             LOG.debug(
                 f"check_tarif: Current plan: {plan_name} Target Tarif: {tarif} Energy used: {energy_used.state} Peak: {self.high_times}"
             )
         known_power = 0
-        smart_meter = "sensor.meter00_power"
+        # smart_meter = "sensor.meter00_power" #retrait de cette ligne pour le block suivant
+        # fix Mig :: definition du smart_meter ; loop sur les entités pour trouver soit "meter00" ou "smartenergymeter_power"
+        for meter_scan in self._hass.states.async_all():
+            entity_lookup = meter_scan.entity_id
+            if entity_lookup.endswith("_power") and entity_lookup.find("meter") > 0:
+                smart_meter = entity_lookup
+                LOG.debug(f"Found smart_meter={entity_lookup}")
         unknown_source_tracker = "sensor.unknown_source_tracker_power"
         for state in self._hass.states.async_all():
             entity = state.entity_id
+            if entity.endswith("hilo_rate_current"):
+                #LOG.debug(f"591: check_tarif {entity} abort loop")
+                continue
             if self.generate_energy_meters:
+                #LOG.debug(f"594: check_tarif {entity} set tarif call")
                 self.set_tarif(entity, state.state, tarif)
             if entity.endswith("_power") and entity not in [
                 unknown_source_tracker,
@@ -617,6 +628,8 @@ class Hilo:
         """not sure why this doesn't get created with a proper device_class"""
         current_state = state.as_dict()
         attrs = current_state.get("attributes", {})
+        if entity.startswith("select.") or entity.find("hilo_rate")>0: #fix mig
+            return
         if not attrs.get("source"):
             LOG.debug(f"No source entity defined on {entity}: {current_state}")
             return
@@ -645,6 +658,9 @@ class Hilo:
     def set_tarif(self, entity, current, new):
         if self.untarificated_devices and entity != f"select.{HILO_ENERGY_TOTAL}":
             return
+        #if entity.find("select.") > 0 and entity.find("hilo_energy")>0: #code inutile
+        #    LOG.debug(f"656: set_tarif sur un select .. BAD")
+        #    return
         if entity.startswith("select.hilo_energy") and current != new:
             LOG.debug(
                 f"check_tarif: Changing tarif of {entity} from {current} to {new}"
